@@ -11,10 +11,10 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"launchpad.net/goamz/aws"
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -23,45 +23,39 @@ const (
 	endpoint = "https://email.us-east-1.amazonaws.com"
 )
 
-// Config specifies configuration options and credentials for accessing Amazon SES.
-type Config struct {
-	// AccessKeyID is your Amazon AWS access key ID.
-	AccessKeyID string
-
-	// SecretAccessKey is your Amazon AWS secret key.
-	SecretAccessKey string
+type SES struct {
+	Auth aws.Auth
 }
 
-// EnvConfig takes the access key ID and secret access key values from the environment variables
-// $AWS_ACCESS_KEY_ID and $AWS_SECRET_ACCESS_KEY, respectively.
-var EnvConfig = Config{
-	AccessKeyID:     os.Getenv("AWS_ACCESS_KEY_ID"),
-	SecretAccessKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
+type Email struct {
+	To      string
+	From    string
+	Subject string
+	// HTML message body
+	HTMLBody string
+	// Text message body
+	Body string
 }
 
-func (c *Config) SendEmail(from, to, subject, body string) (string, error) {
+// Sends HTML, text, or both ses.Email messages
+func (s *SES) Send(email Email) (string, error) {
 	data := make(url.Values)
 	data.Add("Action", "SendEmail")
-	data.Add("Source", from)
-	data.Add("Destination.ToAddresses.member.1", to)
-	data.Add("Message.Subject.Data", subject)
-	data.Add("Message.Body.Text.Data", body)
-	data.Add("AWSAccessKeyId", c.AccessKeyID)
+	data.Add("Source", email.From)
+	data.Add("Destination.ToAddresses.member.1", email.To)
+	data.Add("Message.Subject.Data", email.Subject)
 
-	return sesPost(data, c.AccessKeyID, c.SecretAccessKey)
-}
+	if email.Body != "" {
+		data.Add("Message.Body.Text.Data", email.Body)
+	}
 
-func (c *Config) SendEmailHTML(from, to, subject, bodyText, bodyHTML string) (string, error) {
-	data := make(url.Values)
-	data.Add("Action", "SendEmail")
-	data.Add("Source", from)
-	data.Add("Destination.ToAddresses.member.1", to)
-	data.Add("Message.Subject.Data", subject)
-	data.Add("Message.Body.Text.Data", bodyText)
-	data.Add("Message.Body.Html.Data", bodyHTML)
-	data.Add("AWSAccessKeyId", c.AccessKeyID)
+	if email.HTMLBody != "" {
+		data.Add("Message.Body.Html.Data", email.HTMLBody)
+	}
 
-	return sesPost(data, c.AccessKeyID, c.SecretAccessKey)
+	data.Add("AWSAccessKeyId", s.Auth.AccessKey)
+
+	return sesPost(data, s.Auth.AccessKey, s.Auth.SecretKey)
 }
 
 func authorizationHeader(date, accessKeyID, secretAccessKey string) []string {
